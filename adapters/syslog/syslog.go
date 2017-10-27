@@ -269,7 +269,22 @@ func (m *Message) ECSContainerName() string {
 	}
 	family := labels["com.amazonaws.ecs.task-definition-family"]
 	version := labels["com.amazonaws.ecs.task-definition-version"]
-	taskId := strings.SplitN(labels["com.amazonaws.ecs.task-arn"], "/", 2)[1]
-	shortTaskId := strings.Split(taskId, "-")[0]
-	return fmt.Sprintf("%s:%s/%s", family, version, shortTaskId)
+	return fmt.Sprintf("%s:%s/%s", family, version, m.shortECSTaskID())
+}
+
+func (m *Message) HopperContainerName() string {
+	labels := m.Message.Container.Config.Labels
+	appName, isHopper := labels["io.deliveroo.hopper.app-name"]
+	if !isHopper {
+		return m.ECSContainerName()
+	}
+	serviceName := labels["io.deliveroo.hopper.service-name"]
+	releaseId := labels["io.deliveroo.hopper.release-id"]
+	return fmt.Sprintf("%s/%s/%s/%s", appName, serviceName, releaseId, m.shortECSTaskID())
+}
+
+func (m *Message) shortECSTaskID() string {
+	taskArn := m.Message.Container.Config.Labels["com.amazonaws.ecs.task-arn"]
+	taskId := strings.SplitN(taskArn, "/", 2)[1]
+	return strings.Split(taskId, "-")[0];
 }
