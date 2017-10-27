@@ -1,0 +1,75 @@
+defaults: &defaults
+  working_directory: /logspout
+  docker:
+    - image: deliveroo/circleci:0.1.8
+
+version: 2
+
+jobs:
+  build_image:
+    <<: *defaults
+
+    steps:
+      - setup_remote_docker:
+          reusable: true
+          version: 17.05.0-ce
+
+      - checkout
+
+      - run:
+          name: Build image
+          command: |
+            set -ex
+            docker build -t $(./image) .
+
+      - run:
+          name: Save image
+          command: |
+            set -ex
+            mkdir -p workspace
+            docker save $(./image) --output workspace/${CIRCLE_SHA1}.tar
+
+      - persist_to_workspace:
+          root: workspace
+          paths:
+            - '*.tar'
+
+  push_image:
+    <<: *defaults
+
+    steps:
+      - setup_remote_docker:
+          reusable: true
+          version: 17.05.0-ce
+
+      - checkout
+
+      - attach_workspace:
+          at: workspace
+
+      - run:
+          name: Import Docker image
+          command: |
+            set -ex
+            docker load --input workspace/${CIRCLE_SHA1}.tar
+
+      - run:
+          name: Log in to Docker repository
+          command: docker login -u ${DOCKER_USER} -p ${DOCKER_PASS}
+
+      - run:
+          name: Push the image
+          command: docker push $(./image)
+
+workflows:
+  version: 2
+  test:
+    jobs:
+      - build_image
+      - push_image:
+          requires:
+            - build_image
+          filters:
+            branches:
+              only:
+                - master
