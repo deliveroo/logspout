@@ -280,7 +280,7 @@ func (m *Message) HopperContainerName() string {
 	}
 	serviceName := labels["io.deliveroo.hopper.service-name"]
 	releaseId := labels["io.deliveroo.hopper.release-id"]
-	return fmt.Sprintf("%s/%s/%s/%s", appName, serviceName, releaseId, m.shortECSTaskID())
+	return fmt.Sprintf("%s/%s/%s/%s", serviceName, appName, releaseId, m.shortECSTaskID())
 }
 
 func (m *Message) shortECSTaskID() string {
