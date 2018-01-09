@@ -1,9 +1,34 @@
+version: 2
+
 defaults: &defaults
   working_directory: /logspout
   docker:
-    - image: deliveroo/circleci:0.1.8
+    - image: deliveroo/circleci:0.1.10
 
-version: 2
+push_steps: &push_steps
+  <<: *defaults
+
+  steps:
+  - attach_workspace:
+      at: workspace
+
+  - setup_remote_docker:
+      reusable: true
+      version: 17.05.0-ce
+
+  - run:
+      name: Load CI Image
+      command: |
+        docker load --input "workspace/${CIRCLE_SHA1}.tar"
+
+  - run:
+      name: Push to Image Repository
+      command: |
+        `print_env ${TARGET}`
+        push_image_to_ecr \
+          --image-name "${CIRCLE_PROJECT_REPONAME}" \
+          --ecr-repo $AWS_ECR_REPO_URL \
+          --ecr-region $AWS_REGION
 
 jobs:
   build_image:
@@ -20,53 +45,55 @@ jobs:
           name: Build image
           command: |
             set -ex
-            docker build -t $(./image) .
+            docker build -t ${CIRCLE_PROJECT_REPONAME}:${CIRCLE_SHA1} .
 
       - run:
           name: Save image
           command: |
             set -ex
             mkdir -p workspace
-            docker save $(./image) --output workspace/${CIRCLE_SHA1}.tar
+            docker save ${CIRCLE_PROJECT_REPONAME}:${CIRCLE_SHA1} --output workspace/${CIRCLE_SHA1}.tar
 
       - persist_to_workspace:
           root: workspace
           paths:
             - '*.tar'
 
-  push_image:
-    <<: *defaults
+  push_sandbox:
+    <<: *push_steps
+    environment:
+      TARGET: sandbox
 
-    steps:
-      - setup_remote_docker:
-          reusable: true
-          version: 17.05.0-ce
+  push_staging:
+    <<: *push_steps
+    environment:
+      TARGET: staging
 
-      - checkout
-
-      - attach_workspace:
-          at: workspace
-
-      - run:
-          name: Import Docker image
-          command: |
-            set -ex
-            docker load --input workspace/${CIRCLE_SHA1}.tar
-
-      - run:
-          name: Log in to Docker repository
-          command: docker login -u ${DOCKER_USER} -p ${DOCKER_PASS}
-
-      - run:
-          name: Push the image
-          command: docker push $(./image)
+  push_production:
+    <<: *push_steps
+    environment:
+      TARGET: production
 
 workflows:
   version: 2
-  test:
+  test_and_push:
     jobs:
       - build_image
-      - push_image:
+      - push_sandbox:
+          requires:
+            - build_image
+          filters:
+            branches:
+              only:
+                - sandbox
+      - push_staging:
+          requires:
+            - build_image
+          filters:
+            branches:
+              only:
+                - staging
+      - push_production:
           requires:
             - build_image
           filters:
