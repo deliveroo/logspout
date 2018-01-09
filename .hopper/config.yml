@@ -1,0 +1,18 @@
+version: '1'
+
+resources: &resources
+  cpu: 10
+  memory: 128
+
+services:
+  daemon:
+    container_definitions:
+      daemon:
+        <<: *resources
+        mount_points:
+          - container_path: /var/run/docker.sock
+            source_volume: docker_sock
+    volumes:
+      - name: docker_sock
+        host:
+          source_path: /var/run/docker.sock
